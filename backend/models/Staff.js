@@ -7,8 +7,12 @@ const staffSchema = new mongoose.Schema({
         unique: true
     },
     password: {
+        type: String
+    },
+    googleId: {
         type: String,
-        required: true
+        unique: true,
+        sparse: true
     },
     name: {
         type: String,
@@ -26,17 +30,17 @@ const staffSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    otp: { 
+    otp: {
         type: String,
         default: null
     },
-    otpExpiry: { 
+    otpExpiry: {
         type: Date,
         default: null
     },
-    isVerified: { 
-        type: Boolean, 
-        default: false 
+    isVerified: {
+        type: Boolean,
+        default: false
     }
 });
 
