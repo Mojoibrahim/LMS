@@ -23,7 +23,10 @@ const authRoutes = require('./routes/authRoutes');
 const app = express();
 
 // --- Middleware ---
-app.use(cors());
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser()); // Added for TikTok CSRF state token
@@ -33,6 +36,11 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'a_secure_random_string',
     resave: false,
     saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        maxAge: 24 * 60 * 60 * 1000
+    }
 }));
 
 app.use(passport.initialize());
@@ -156,18 +164,22 @@ app.get('/auth/tiktok', (req, res) => {
     res.redirect(url);
 });
 
-app.get('/auth/tiktok/callback', async(req, res) => {
+app.get('/auth/tiktok/callback', async(req, res, next) => {
     const { code } = req.query;
 
     try {
         // Exchange authorization code for token
-        const tokenResponse = await axios.post('https://open.tiktokapis.com/v2/oauth/token/', {
+        const params = new URLSearchParams({
             client_key: process.env.TIKTOK_CLIENT_KEY,
             client_secret: process.env.TIKTOK_CLIENT_SECRET,
             code: code,
             grant_type: 'authorization_code',
             redirect_uri: `${process.env.BACKEND_URL}/auth/tiktok/callback`
-        }, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+        });
+
+        const tokenResponse = await axios.post('https://open.tiktokapis.com/v2/oauth/token/', params.toString(), { 
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' } 
+        });
 
         const accessToken = tokenResponse.data.access_token;
 
@@ -191,7 +203,7 @@ app.get('/auth/tiktok/callback', async(req, res) => {
 
         // Establish passport session login manually for TikTok
         req.login(existingStaff, (err) => {
-            if (err) throw err;
+            if (err) return next(err);
             res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
         });
 

@@ -36,9 +36,21 @@
     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
     "token_uri": "https://oauth2.googleapis.com/token",
     "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-    "client_secret": "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",
     "redirect_uris": [
       "http://localhost:5000/auth/google/callback"
-    ]
+    ],
+
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.7.4"
+  },
+  "facebook": {
+    "client_id": "YOUR_FACEBOOK_CLIENT_ID",
+    "client_secret": "YOUR_FACEBOOK_CLIENT_SECRET",
+    "callback_url": "http://localhost:5000/auth/facebook/callback"
   }
 }
