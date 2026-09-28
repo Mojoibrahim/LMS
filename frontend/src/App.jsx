@@ -1,9 +1,9 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './Auth/Login';
 import Register from './Auth/Register';
-import OtpVerification from './Auth/OtpVerification'; // Imported the new OTP component
+import OtpVerification from './Auth/OtpVerification'; // Adjust path if needed
 import TestDashboard from './pages/TestDashboard';
-import './App.css'; // You can keep your existing CSS file
+import './App.css'; 
 
 function App() {
   return (
@@ -15,7 +15,7 @@ function App() {
         {/* Auth Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/otp-verification" element={<OtpVerification />} /> {/* New OTP Verification route added */}
+        <Route path="/otp-verification" element={<OtpVerification />} />
         
         {/* Protected/Test Page Route */}
         <Route path="/dashboard" element={<TestDashboard />} />

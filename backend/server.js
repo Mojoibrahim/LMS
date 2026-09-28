@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const jwt = require('jsonwebtoken'); // Required for JWT verification
 
 // --- Additional Imports for Social Login ---
 const axios = require('axios');
@@ -22,10 +23,17 @@ const authRoutes = require('./routes/authRoutes');
 
 const app = express();
 
+// --- CRITICAL FIX FOR NGROK ---
+// Tells Express to trust the Ngrok proxy so it allows 'secure: true' cookies to be sent over the tunnel.
+app.set('trust proxy', 1);
+
 // --- Middleware ---
+// Strict CORS configuration to allow Session ID cookies to pass between React and Express
 app.use(cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -37,9 +45,12 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        maxAge: 24 * 60 * 60 * 1000
+        // UPDATED: Must be true if your backend is running on an HTTPS URL (like Ngrok). 
+        // If testing purely on localhost for both frontend and backend, you may need to switch this to false.
+        secure: true,
+        httpOnly: true, // Prevents client-side JS from accessing the session cookie
+        // UPDATED: 'none' allows the browser to send cookies across different domains (e.g., localhost to ngrok)
+        sameSite: 'none'
     }
 }));
 
@@ -131,9 +142,54 @@ const connectDB = async() => {
 
 connectDB();
 
+// --- Double Layer Security Middleware ---
+// This middleware intercepts requests and checks for BOTH the Session Cookie and the JWT.
+const requireDoubleLayerAuth = (req, res, next) => {
+    // 1. Check Layer 1: Is there a valid active server session (cookie)?
+    if (!req.session || !req.session.userId) {
+        return res.status(401).json({ error: 'Unauthorized: Session missing or expired' });
+    }
+
+    // 2. Check Layer 2: Is there a valid JWT in the Authorization header?
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized: JWT missing' });
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        // 3. Ensure the Session User and the JWT User are the same entity
+        if (decoded.id !== req.session.userId) {
+            return res.status(403).json({ error: 'Forbidden: Token mismatch' });
+        }
+
+        // Attach the verified user payload to the request for the route to use
+        req.user = decoded;
+        next(); // Both layers passed, proceed to the requested route
+    } catch (error) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid JWT' });
+    }
+};
+
 // --- API Routes ---
 // app.use('/api/staff', staffRoutes);
 app.use('/api/auth', authRoutes);
+
+// Endpoint for Dashboard Analytics
+// Protected this route with the double layer security middleware
+app.get('/api/users', requireDoubleLayerAuth, async(req, res) => {
+    try {
+        // Fetch users from the Staff model, selecting only name and email for the frontend chart
+        const users = await Staff.find({}, 'name email');
+        res.status(200).json(users);
+    } catch (error) {
+        console.error("Database error:", error);
+        res.status(500).json({ error: 'Failed to fetch users' });
+    }
+});
 
 // --- Google OAuth Routes ---
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
@@ -164,22 +220,18 @@ app.get('/auth/tiktok', (req, res) => {
     res.redirect(url);
 });
 
-app.get('/auth/tiktok/callback', async(req, res, next) => {
+app.get('/auth/tiktok/callback', async(req, res) => {
     const { code } = req.query;
 
     try {
         // Exchange authorization code for token
-        const params = new URLSearchParams({
+        const tokenResponse = await axios.post('https://open.tiktokapis.com/v2/oauth/token/', {
             client_key: process.env.TIKTOK_CLIENT_KEY,
             client_secret: process.env.TIKTOK_CLIENT_SECRET,
             code: code,
             grant_type: 'authorization_code',
             redirect_uri: `${process.env.BACKEND_URL}/auth/tiktok/callback`
-        });
-
-        const tokenResponse = await axios.post('https://open.tiktokapis.com/v2/oauth/token/', params.toString(), { 
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' } 
-        });
+        }, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
 
         const accessToken = tokenResponse.data.access_token;
 
@@ -203,7 +255,7 @@ app.get('/auth/tiktok/callback', async(req, res, next) => {
 
         // Establish passport session login manually for TikTok
         req.login(existingStaff, (err) => {
-            if (err) return next(err);
+            if (err) throw err;
             res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
         });
 

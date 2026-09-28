@@ -107,7 +107,10 @@ exports.verifyOTP = async(req, res) => {
         staff.isVerified = true;
         await staff.save();
 
-        // Generate a JWT Token
+        // NEW: Establish Layer 1 security by attaching the user ID to the session cookie[cite: 19]
+        req.session.userId = staff._id.toString();
+
+        // Generate a JWT Token (Layer 2)
         const token = jwt.sign({ id: staff._id, role: staff.role },
             process.env.JWT_SECRET || 'supersecretkey', { expiresIn: '1d' }
         );
