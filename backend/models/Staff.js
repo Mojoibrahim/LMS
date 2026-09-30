@@ -1,13 +1,17 @@
+// models/Staff.js
 const mongoose = require('mongoose');
 
 const staffSchema = new mongoose.Schema({
     email: {
         type: String,
-        required: true,
-        unique: true
+        required: [true, 'Email is required'],
+        unique: true,
+        lowercase: true,
+        trim: true
     },
     password: {
-        type: String
+        type: String,
+        required: true
     },
     googleId: {
         type: String,
@@ -16,7 +20,8 @@ const staffSchema = new mongoose.Schema({
     },
     name: {
         type: String,
-        default: 'New User'
+        default: 'New User',
+        trim: true
     },
     department: {
         type: String,
@@ -24,7 +29,12 @@ const staffSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        default: 'student'
+        // Enforce strict roles: admin, instructor, student
+        enum: {
+            values: ['admin', 'instructor', 'student'],
+            message: '{VALUE} is not a valid role'
+        },
+        default: 'student' // Least privilege principle
     },
     checkedIn: {
         type: Boolean,
@@ -42,6 +52,6 @@ const staffSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     }
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Staff', staffSchema);
