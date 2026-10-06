@@ -24,7 +24,7 @@ exports.registerStaff = async(req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
         const otp = generateOTP();
 
-        // Allow selection of role, but ensure it adheres to valid values; fallback to 'student'
+    // Allow selection of role, but ensure it adheres to valid values; fallback to 'student'
         const assignedRole = ['admin', 'instructor', 'student'].includes(role) ? role : 'student';
 
         const newStaff = new Staff({
@@ -113,7 +113,7 @@ exports.verifyOTP = async(req, res) => {
             req.session.userId = staff._id.toString();
         }
 
-        // Include role directly into JWT token payload
+    // Include role directly into JWT token payload
         const token = jwt.sign({ id: staff._id, role: staff.role },
             process.env.JWT_SECRET || 'supersecretkey', { expiresIn: '1d' }
         );

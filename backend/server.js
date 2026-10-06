@@ -90,25 +90,39 @@ passport.use(new GoogleStrategy({
 passport.use(new FacebookStrategy({
         clientID: process.env.FACEBOOK_APP_ID,
         clientSecret: process.env.FACEBOOK_APP_SECRET,
-        callbackURL: process.env.FACEBOOK_CALLBACK_URL,
+        callbackURL: `${process.env.BACKEND_URL}/auth/facebook/callback`, 
         profileFields: ['id', 'displayName', 'emails']
     },
     async(accessToken, refreshToken, profile, done) => {
         try {
-            let existingStaff = await Staff.findOne({ facebookId: profile.id });
+            const userEmail = profile.emails && profile.emails.length > 0 ? profile.emails[0].value.toLowerCase() : null;
 
+            // 1. Search by Facebook ID
+            let existingStaff = await Staff.findOne({ facebookId: profile.id });
             if (existingStaff) {
                 return done(null, existingStaff);
-            } else {
-                const newStaff = await new Staff({
-                    facebookId: profile.id,
-                    email: profile.emails && profile.emails.length > 0 ? profile.emails[0].value : '',
-                    name: profile.displayName,
-                    isVerified: true
-                }).save();
-
-                return done(null, newStaff);
             }
+
+            // 2. Link account if user with same email exists
+            if (userEmail) {
+                existingStaff = await Staff.findOne({ email: userEmail });
+                if (existingStaff) {
+                    existingStaff.facebookId = profile.id;
+                    if (!existingStaff.isVerified) existingStaff.isVerified = true;
+                    await existingStaff.save();
+                    return done(null, existingStaff);
+                }
+            }
+
+            // 3. Create new user if no match found
+            const newStaff = await new Staff({
+                facebookId: profile.id,
+                email: userEmail,
+                name: profile.displayName,
+                isVerified: true
+            }).save();
+
+            return done(null, newStaff);
         } catch (error) {
             console.error("Error during Facebook Authentication:", error);
             return done(error, null);

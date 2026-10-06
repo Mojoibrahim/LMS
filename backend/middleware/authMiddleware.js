@@ -20,7 +20,7 @@ exports.protect = async(req, res, next) => {
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'supersecretkey');
 
-        // Fetch current user details excluding password to keep req.user fresh
+// Fetch current user details excluding password to keep req.user fresh
         const currentUser = await Staff.findById(decoded.id).select('-password');
         if (!currentUser) {
             return res.status(401).json({ message: 'User belonging to this token no longer exists' });

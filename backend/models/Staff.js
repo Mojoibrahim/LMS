@@ -11,9 +11,17 @@ const staffSchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: true
+        // Allows local login to enforce passwords while letting OAuth bypass it
+        required: function() {
+            return !this.googleId && !this.facebookId;
+        }
     },
     googleId: {
+        type: String,
+        unique: true,
+        sparse: true
+    },
+    facebookId: {
         type: String,
         unique: true,
         sparse: true
@@ -29,12 +37,11 @@ const staffSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        // Enforce strict roles: admin, instructor, student
         enum: {
             values: ['admin', 'instructor', 'student'],
             message: '{VALUE} is not a valid role'
         },
-        default: 'student' // Least privilege principle
+        default: 'student'
     },
     checkedIn: {
         type: Boolean,
