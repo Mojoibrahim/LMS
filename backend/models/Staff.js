@@ -13,7 +13,7 @@ const staffSchema = new mongoose.Schema({
         type: String,
         // Allows local login to enforce passwords while letting OAuth bypass it
         required: function() {
-            return !this.googleId && !this.facebookId;
+            return !this.googleId && !this.facebookId && !this.tiktokId;
         }
     },
     googleId: {
@@ -22,6 +22,11 @@ const staffSchema = new mongoose.Schema({
         sparse: true
     },
     facebookId: {
+        type: String,
+        unique: true,
+        sparse: true
+    },
+    tiktokId: {
         type: String,
         unique: true,
         sparse: true

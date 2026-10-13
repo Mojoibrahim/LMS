@@ -17,6 +17,9 @@ const FacebookStrategy = require('passport-facebook').Strategy;
 // Import the updated Staff model
 const Staff = require('./models/Staff');
 
+//Import the M-Pesa routes for handling M-Pesa related endpoints
+const mpesaRoutes = require('./routes/mpesaRoutes'); 
+
 // Import your Staff routes here once created
 // const staffRoutes = require('./routes/staffRoutes'); 
 const authRoutes = require('./routes/authRoutes');
@@ -191,7 +194,7 @@ const requireDoubleLayerAuth = (req, res, next) => {
 // --- API Routes ---
 // app.use('/api/staff', staffRoutes);
 app.use('/api/auth', authRoutes);
-
+app.use('/api/mpesa', mpesaRoutes);
 // Endpoint for Dashboard Analytics
 // Protected this route with the double layer security middleware
 app.get('/api/users', requireDoubleLayerAuth, async(req, res) => {
@@ -235,7 +238,7 @@ app.get('/auth/tiktok', (req, res) => {
 });
 
 app.get('/auth/tiktok/callback', async(req, res) => {
-    const { code } = req.query;
+    const { code, state } = req.query;
 
     try {
         // Exchange authorization code for token
@@ -262,6 +265,8 @@ app.get('/auth/tiktok/callback', async(req, res) => {
         if (!existingStaff) {
             existingStaff = await new Staff({
                 tiktokId: tiktokUser.open_id,
+                // Generate a placeholder to pass Mongoose validation
+                email: `${tiktokUser.open_id}@tiktok.placeholder.com`, 
                 name: tiktokUser.display_name,
                 isVerified: true
             }).save();
@@ -270,12 +275,16 @@ app.get('/auth/tiktok/callback', async(req, res) => {
         // Establish passport session login manually for TikTok
         req.login(existingStaff, (err) => {
             if (err) throw err;
+            
+            // Sync Session User ID for requireDoubleLayerAuth middleware
+            req.session.userId = existingStaff._id; 
+            
             res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
         });
 
     } catch (error) {
-        console.error("TikTok Auth Error:", error);
-        res.redirect(`${process.env.FRONTEND_URL}/login`);
+        console.error("TikTok Auth Error:", error.response?.data || error.message);
+        res.redirect(`${process.env.FRONTEND_URL}/login?error=tiktok_failed`);
     }
 });
 

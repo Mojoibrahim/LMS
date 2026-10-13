@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const Staff = require('../models/Staff');
 const { registerStaff, loginStaff, verifyOTP } = require('../controllers/authController');
-const { protect, authorize } = require('../middleware/authMiddleware');
+const { protect, authorize } = require('../middlewares/authMiddleware');
 
 // Public Routes
 router.post('/register', registerStaff);
