@@ -4,10 +4,16 @@ import { Navigate, Outlet } from 'react-router-dom';
 export default function ProtectedRoute({ allowedRoles }) {
   const token = localStorage.getItem('jwt_token');
   const storedUser = localStorage.getItem('user_data');
-  const user = storedUser ? JSON.parse(storedUser) : null;
+  let user = null;
+
+  try {
+    user = storedUser ? JSON.parse(storedUser) : null;
+  } catch {
+    return <Navigate to="/login" replace />;
+  }
 
   // If there is no token or user data, redirect to login
-  if (!token || !user) {
+  if (!token || !user || typeof user !== 'object' || typeof user.role !== 'string') {
     return <Navigate to="/login" replace />;
   }
 

@@ -133,3 +133,22 @@ exports.verifyOTP = async(req, res) => {
         res.status(500).json({ error: 'Server error during verification' });
     }
 };
+
+// Complete OAuth sign-in by issuing the same JWT and user data used by the frontend guard.
+exports.getOAuthSession = (req, res) => {
+    if (!req.isAuthenticated || !req.isAuthenticated() || !req.user) {
+        return res.status(401).json({ message: 'Not authenticated with an OAuth provider' });
+    }
+
+    const user = {
+        id: req.user._id,
+        email: req.user.email,
+        name: req.user.name,
+        role: req.user.role
+    };
+    const token = jwt.sign({ id: user.id, role: user.role },
+        process.env.JWT_SECRET || 'supersecretkey', { expiresIn: '1d' }
+    );
+
+    return res.status(200).json({ token, user });
+};

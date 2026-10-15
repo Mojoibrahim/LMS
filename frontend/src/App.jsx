@@ -2,12 +2,14 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './Auth/Login';
 import Register from './Auth/Register';
 import OtpVerification from './Auth/OtpVerification';
+import OAuthCallback from './Auth/OAuthCallback';
 import './App.css';
 
 // Role-Specific Dashboards
 import AdminDashboard from './pages/Admin/Dashboard';
 import InstructorDashboard from './pages/instructor/Dashboard';
 import StudentDashboard from './pages/student/Dashboard';
+import TestDashboard from './pages/TestDashboard';
 
 // Security Component
 import ProtectedRoute from './components/ProtectedRoute';
@@ -38,6 +40,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/otp-verification" element={<OtpVerification />} />
+        <Route path="/auth/callback" element={<OAuthCallback />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
         
         {/* Admin Portal */}
@@ -53,6 +56,7 @@ function App() {
         {/* Student Portal (Formerly TestDashboard) */}
         <Route element={<ProtectedRoute allowedRoles={['student', 'instructor', 'admin']} />}>
           <Route path="/student/dashboard" element={<StudentDashboard />} />
+          <Route path="/test-dashboard" element={<TestDashboard />} />
         </Route>
 
         {/* Fallback for the old dashboard path */}

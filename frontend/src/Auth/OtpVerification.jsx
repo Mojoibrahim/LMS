@@ -39,8 +39,12 @@ export default function OtpVerification() {
       if (data.token) {
         localStorage.setItem('jwt_token', data.token);
       }
-      
-      navigate('/dashboard'); 
+
+      if (data.user) {
+        localStorage.setItem('user_data', JSON.stringify(data.user));
+      }
+
+      navigate(location.state?.returnTo || '/dashboard');
     } catch (error) {
       if (error.response) {
         // Server returned 4xx or 5xx status code

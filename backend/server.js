@@ -43,17 +43,17 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser()); // Added for TikTok CSRF state token
 
 // --- Session & Passport Middleware ---
+const secureSessionCookie = process.env.NODE_ENV === 'production' ||
+    process.env.BACKEND_URL?.startsWith('https://') === true;
+
 app.use(session({
     secret: process.env.SESSION_SECRET || 'a_secure_random_string',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        // UPDATED: Must be true if your backend is running on an HTTPS URL (like Ngrok). 
-        // If testing purely on localhost for both frontend and backend, you may need to switch this to false.
-        secure: true,
+        secure: secureSessionCookie,
         httpOnly: true, // Prevents client-side JS from accessing the session cookie
-        // UPDATED: 'none' allows the browser to send cookies across different domains (e.g., localhost to ngrok)
-        sameSite: 'none'
+        sameSite: secureSessionCookie ? 'none' : 'lax'
     }
 }));
 
@@ -214,7 +214,12 @@ app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'em
 app.get('/auth/google/callback',
     passport.authenticate('google', { failureRedirect: `${process.env.FRONTEND_URL}/login` }),
     (req, res) => {
-        res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
+        req.session.save((error) => {
+            if (error) {
+                return res.status(500).send('Unable to save the authenticated session.');
+            }
+            res.redirect(`${process.env.FRONTEND_URL}/auth/callback`);
+        });
     }
 );
 
@@ -224,7 +229,12 @@ app.get('/auth/facebook', passport.authenticate('facebook', { scope: ['email'] }
 app.get('/auth/facebook/callback',
     passport.authenticate('facebook', { failureRedirect: `${process.env.FRONTEND_URL}/login` }),
     (req, res) => {
-        res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
+        req.session.save((error) => {
+            if (error) {
+                return res.status(500).send('Unable to save the authenticated session.');
+            }
+            res.redirect(`${process.env.FRONTEND_URL}/auth/callback`);
+        });
     }
 );
 
@@ -237,7 +247,7 @@ app.get('/auth/tiktok', (req, res) => {
     res.redirect(url);
 });
 
-app.get('/auth/tiktok/callback', async(req, res) => {
+app.get('/auth/tiktok/callback', async(req, res, next) => {
     const { code, state } = req.query;
 
     try {
@@ -274,12 +284,15 @@ app.get('/auth/tiktok/callback', async(req, res) => {
 
         // Establish passport session login manually for TikTok
         req.login(existingStaff, (err) => {
-            if (err) throw err;
+            if (err) return next(err);
             
             // Sync Session User ID for requireDoubleLayerAuth middleware
-            req.session.userId = existingStaff._id; 
+            req.session.userId = existingStaff._id.toString();
             
-            res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
+            req.session.save((sessionError) => {
+                if (sessionError) return next(sessionError);
+                res.redirect(`${process.env.FRONTEND_URL}/auth/callback`);
+            });
         });
 
     } catch (error) {

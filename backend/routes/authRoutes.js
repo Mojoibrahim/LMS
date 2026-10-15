@@ -2,13 +2,14 @@
 const express = require('express');
 const router = express.Router();
 const Staff = require('../models/Staff');
-const { registerStaff, loginStaff, verifyOTP } = require('../controllers/authController');
+const { registerStaff, loginStaff, verifyOTP, getOAuthSession } = require('../controllers/authController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
 // Public Routes
 router.post('/register', registerStaff);
 router.post('/login', loginStaff);
 router.post('/verify-otp', verifyOTP);
+router.get('/oauth-session', getOAuthSession);
 
 router.post('/logout', (req, res) => {
     if (req.session) {

@@ -28,16 +28,16 @@ export default function Login() {
 
       const data = response.data;
 
-      // Checks if the server provided a JWT in the response data.
-      if (data.token) {
-        // Saves the JWT into the browser's localStorage. This establishes the second security layer.
-        localStorage.setItem('jwt_token', data.token);
-      }
-
       if (data.requiresOTP) {
-        navigate('/otp-verification', { state: { email: email } });
+        localStorage.removeItem('jwt_token');
+        localStorage.removeItem('user_data');
+        navigate('/otp-verification', { state: { email, returnTo: '/test-dashboard' } });
+      } else if (data.token && data.user) {
+        localStorage.setItem('jwt_token', data.token);
+        localStorage.setItem('user_data', JSON.stringify(data.user));
+        navigate('/test-dashboard');
       } else {
-        navigate('/dashboard');
+        alert('Login response did not include authentication details.');
       }
     } catch (error) {
       if (error.response) {
