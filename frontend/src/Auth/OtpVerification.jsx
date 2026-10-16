@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import axios from 'axios';
+import { getDashboardPath } from '../utils/dashboardRoutes';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -34,17 +35,16 @@ export default function OtpVerification() {
       });
 
       const data = response.data;
-
-      // Save the token exactly as the dashboard expects it 
-      if (data.token) {
-        localStorage.setItem('jwt_token', data.token);
+      const dashboardPath = getDashboardPath(data.user);
+      if (!data.token || !dashboardPath) {
+        alert('Verification response did not include valid authentication details.');
+        return;
       }
 
-      if (data.user) {
-        localStorage.setItem('user_data', JSON.stringify(data.user));
-      }
+      localStorage.setItem('jwt_token', data.token);
+      localStorage.setItem('user_data', JSON.stringify(data.user));
 
-      navigate(location.state?.returnTo || '/dashboard');
+      navigate(dashboardPath, { replace: true });
     } catch (error) {
       if (error.response) {
         // Server returned 4xx or 5xx status code

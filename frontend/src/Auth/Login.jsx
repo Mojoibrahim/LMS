@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+import { getDashboardPath } from '../utils/dashboardRoutes';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -31,11 +32,17 @@ export default function Login() {
       if (data.requiresOTP) {
         localStorage.removeItem('jwt_token');
         localStorage.removeItem('user_data');
-        navigate('/otp-verification', { state: { email, returnTo: '/test-dashboard' } });
+        navigate('/otp-verification', { state: { email } });
       } else if (data.token && data.user) {
+        const dashboardPath = getDashboardPath(data.user);
+        if (!dashboardPath) {
+          alert('Login response did not include a valid user role.');
+          return;
+        }
+
         localStorage.setItem('jwt_token', data.token);
         localStorage.setItem('user_data', JSON.stringify(data.user));
-        navigate('/test-dashboard');
+        navigate(dashboardPath, { replace: true });
       } else {
         alert('Login response did not include authentication details.');
       }

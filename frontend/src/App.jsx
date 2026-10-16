@@ -7,9 +7,8 @@ import './App.css';
 
 // Role-Specific Dashboards
 import AdminDashboard from './pages/Admin/Dashboard';
-import InstructorDashboard from './pages/instructor/Dashboard';
-import StudentDashboard from './pages/student/Dashboard';
-import TestDashboard from './pages/TestDashboard';
+import InstructorDashboard from './pages/Instructor/Dashboard';
+import StudentDashboard from './pages/Student/TestDashboard';
 
 // Security Component
 import ProtectedRoute from './components/ProtectedRoute';
@@ -56,7 +55,7 @@ function App() {
         {/* Student Portal (Formerly TestDashboard) */}
         <Route element={<ProtectedRoute allowedRoles={['student', 'instructor', 'admin']} />}>
           <Route path="/student/dashboard" element={<StudentDashboard />} />
-          <Route path="/test-dashboard" element={<TestDashboard />} />
+          <Route path="/test-dashboard" element={<StudentDashboard />} />
         </Route>
 
         {/* Fallback for the old dashboard path */}

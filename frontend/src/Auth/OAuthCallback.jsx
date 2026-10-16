@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { getDashboardPath } from '../utils/dashboardRoutes';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -17,15 +18,16 @@ export default function OAuthCallback() {
         'ngrok-skip-browser-warning': 'true'
       }
     }).then(({ data }) => {
-      if (!data.token || !data.user) {
-        throw new Error('The authentication response was incomplete.');
+      const dashboardPath = getDashboardPath(data.user);
+      if (!data.token || !dashboardPath) {
+        throw new Error('The authentication response did not include valid user details.');
       }
 
       localStorage.setItem('jwt_token', data.token);
       localStorage.setItem('user_data', JSON.stringify(data.user));
 
       if (isActive) {
-        navigate('/test-dashboard', { replace: true });
+        navigate(dashboardPath, { replace: true });
       }
     }).catch((requestError) => {
       if (isActive) {
