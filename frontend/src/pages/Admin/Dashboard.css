@@ -386,7 +386,8 @@
   width: 34px;
   height: 34px;
   place-items: center;
-  border-radius: 11px;
+  overflow: hidden;
+  border-radius: 50%;
   color: #5847be;
   background: #e9e4ff;
   font-size: 12px;

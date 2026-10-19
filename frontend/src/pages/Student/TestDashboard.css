@@ -1,3 +1,10 @@
+#root:has(.student-dashboard) {
+  width: 100%;
+  max-width: none;
+  border: 0;
+  text-align: left;
+}
+
 .student-dashboard {
   --dashboard-ink: #17213a;
   --dashboard-muted: #8790a4;

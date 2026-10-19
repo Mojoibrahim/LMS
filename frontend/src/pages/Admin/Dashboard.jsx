@@ -9,6 +9,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import FloatingChatBot from '../../components/FloatingChatBot';
+import ProfileEditor from '../../components/ProfileEditor';
 import './Dashboard.css';
 
 const enrollmentData = {
@@ -90,7 +92,7 @@ function AdminDashboard() {
   const [courseSearch, setCourseSearch] = useState('');
   const [activeNav, setActiveNav] = useState('Overview');
   const [showNotifications, setShowNotifications] = useState(false);
-  const user = JSON.parse(localStorage.getItem('user_data') || '{}');
+  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user_data') || '{}'));
   const firstName = user.name?.trim().split(/\s+/)[0] || 'Admin';
   const filteredCourses = useMemo(
     () => courses.filter((course) => `${course.name} ${course.category} ${course.instructor}`.toLowerCase().includes(courseSearch.toLowerCase())),
@@ -169,6 +171,7 @@ function AdminDashboard() {
           <Icon name="logout" size={18} /><span>Sign out</span>
         </button>
       </aside>
+      <FloatingChatBot courseCount={courses.length} />
 
       <main className="admin-main">
         <header className="admin-topbar">
@@ -190,11 +193,14 @@ function AdminDashboard() {
                 </div>
               )}
             </div>
-            <div className="topbar-profile">
-              <span className="profile-avatar">{firstName.slice(0, 1).toUpperCase()}</span>
-              <span className="profile-copy"><strong>{user.name || 'Administrator'}</strong><small>Administrator</small></span>
-              <Icon name="chevron" size={15} />
-            </div>
+            <ProfileEditor
+              avatarClassName="profile-avatar"
+              className="topbar-profile"
+              copyClassName="profile-copy"
+              onUpdated={setUser}
+              roleLabel="Administrator"
+              user={user}
+            />
           </div>
         </header>
 

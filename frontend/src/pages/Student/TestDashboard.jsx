@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PaymentForm from '../../PaymentForm';
+import FloatingChatBot from '../../components/FloatingChatBot';
+import ProfileEditor from '../../components/ProfileEditor';
 import './TestDashboard.css';
 
 const courses = [
@@ -21,7 +23,6 @@ const navigation = [
   { label: 'Class sessions', icon: 'calendar' },
   { label: 'Submissions', icon: 'upload' },
   { label: 'Group', icon: 'people' },
-  { label: 'Chat bot', icon: 'chat' },
   { label: 'Payment', icon: 'payment' },
   { label: 'Certificates', icon: 'certificate' },
 ];
@@ -54,7 +55,6 @@ function Icon({ name, size = 20 }) {
     search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
     upload: <><path d="M12 16V4m-4 4 4-4 4 4" /><path d="M20 16.5v2A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5v-2" /></>,
     people: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>,
-    chat: <><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z" /></>,
     payment: <><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20M7 15h3" /></>,
     certificate: <><circle cx="12" cy="8" r="6" /><path d="m8.2 13-1.1 8L12 18l4.9 3-1.1-8" /></>,
     bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
@@ -62,7 +62,6 @@ function Icon({ name, size = 20 }) {
     play: <path d="m9 6 10 6-10 6z" />,
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
     check: <><circle cx="12" cy="12" r="9" /><path d="m8 12 2.5 2.5L16 9" /></>,
-    send: <><path d="m22 2-7 20-4-9-9-4 20-7z" /><path d="M22 2 11 13" /></>,
     logout: <><path d="M10 17l5-5-5-5M15 12H3" /><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" /></>,
   };
 
@@ -86,16 +85,12 @@ function Icon({ name, size = 20 }) {
 function TestDashboard() {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState('Dashboard');
+  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user_data') || '{}'));
   const [enrolledCourses, setEnrolledCourses] = useState(courses.map((course) => course.title));
   const [sessionReminders, setSessionReminders] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState({});
   const [submittedAssignments, setSubmittedAssignments] = useState([]);
   const [joinedGroups, setJoinedGroups] = useState([]);
-  const [messages, setMessages] = useState([
-    { from: 'bot', text: 'Hi Alex! I can help you find courses, check deadlines, or explain how your dashboard works.' },
-  ]);
-  const [chatMessage, setChatMessage] = useState('');
-
   const handleLogout = () => {
     localStorage.removeItem('jwt_token');
     localStorage.removeItem('user_data');
@@ -124,23 +119,6 @@ function TestDashboard() {
     setSubmittedAssignments((current) => (
       current.includes(assignmentId) ? current : [...current, assignmentId]
     ));
-  };
-
-  const sendChatMessage = (event) => {
-    event.preventDefault();
-    const text = chatMessage.trim();
-    if (!text) return;
-
-    const normalizedText = text.toLowerCase();
-    let reply = 'I can help with courses, class sessions, submissions, payments, or certificates. Which one would you like to know about?';
-    if (normalizedText.includes('course')) reply = `You’re enrolled in ${enrolledCourses.length} courses. Open Explore courses to browse the course catalog.`;
-    else if (normalizedText.includes('session') || normalizedText.includes('class')) reply = 'Your next class is the Design principles workshop, today at 2:00 PM.';
-    else if (normalizedText.includes('submit') || normalizedText.includes('assignment')) reply = 'Open Submissions, choose an assignment, and attach your work before submitting it.';
-    else if (normalizedText.includes('payment') || normalizedText.includes('pay')) reply = 'You can initiate a payment from the Payment section using the M-Pesa form.';
-    else if (normalizedText.includes('certificate')) reply = 'Certificates become available after you complete a course.';
-
-    setMessages((current) => [...current, { from: 'student', text }, { from: 'bot', text: reply }]);
-    setChatMessage('');
   };
 
   const renderSection = () => {
@@ -280,33 +258,6 @@ function TestDashboard() {
       );
     }
 
-    if (activeSection === 'Chat bot') {
-      return (
-        <section className="section-page">
-          <div className="section-intro">
-            <span className="eyebrow">HERE WHEN YOU NEED HELP</span>
-            <h1>Student assistant</h1>
-            <p>Ask about your courses, sessions, assignments, payments, or certificates.</p>
-          </div>
-          <div className="panel chat-panel">
-            <div className="chat-messages" aria-live="polite">
-              {messages.map((message, index) => (
-                <div className={`chat-message ${message.from}`} key={`${message.from}-${index}`}>
-                  {message.from === 'bot' && <span className="chat-avatar">t</span>}
-                  <p>{message.text}</p>
-                </div>
-              ))}
-            </div>
-            <form className="chat-form" onSubmit={sendChatMessage}>
-              <input aria-label="Message the student assistant" onChange={(event) => setChatMessage(event.target.value)} placeholder="Ask a question..." value={chatMessage} />
-              <button aria-label="Send message" disabled={!chatMessage.trim()} type="submit"><Icon name="send" size={17} /></button>
-            </form>
-          </div>
-          <p className="demo-note">The student assistant uses sample responses in this dashboard preview.</p>
-        </section>
-      );
-    }
-
     if (activeSection === 'Payment') {
       return (
         <section className="section-page">
@@ -385,6 +336,7 @@ function TestDashboard() {
           <span>Log out</span>
         </button>
       </aside>
+      <FloatingChatBot courseCount={enrolledCourses.length} />
 
       <main className="dashboard-main">
         <header className="dashboard-topbar">
@@ -403,11 +355,14 @@ function TestDashboard() {
               <span className="notification-dot" />
             </button>
             <div className="topbar-divider" />
-            <button className="profile-button" type="button" aria-label="Student profile">
-              <span className="avatar">AM</span>
-              <span className="profile-name">Alex Morgan<small>Student</small></span>
-              <span className="profile-chevron">⌄</span>
-            </button>
+            <ProfileEditor
+              avatarClassName="avatar"
+              className="profile-button"
+              copyClassName="profile-name"
+              onUpdated={setUser}
+              roleLabel="Student"
+              user={user}
+            />
           </div>
         </header>
 

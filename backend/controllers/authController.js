@@ -125,7 +125,9 @@ exports.verifyOTP = async(req, res) => {
                 id: staff._id,
                 email: staff.email,
                 name: staff.name,
-                role: staff.role
+                role: staff.role,
+                department: staff.department,
+                profilePicture: staff.profilePicture
             }
         });
     } catch (error) {
@@ -144,7 +146,9 @@ exports.getOAuthSession = (req, res) => {
         id: req.user._id,
         email: req.user.email,
         name: req.user.name,
-        role: req.user.role
+        role: req.user.role,
+        department: req.user.department,
+        profilePicture: req.user.profilePicture
     };
     const token = jwt.sign({ id: user.id, role: user.role },
         process.env.JWT_SECRET || 'supersecretkey', { expiresIn: '1d' }

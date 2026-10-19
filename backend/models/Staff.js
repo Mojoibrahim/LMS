@@ -36,6 +36,10 @@ const staffSchema = new mongoose.Schema({
         default: 'New User',
         trim: true
     },
+    profilePicture: {
+        type: String,
+        default: ''
+    },
     department: {
         type: String,
         default: 'Unassigned'

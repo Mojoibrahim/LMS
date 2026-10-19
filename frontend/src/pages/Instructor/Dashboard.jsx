@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import FloatingChatBot from '../../components/FloatingChatBot';
+import ProfileEditor from '../../components/ProfileEditor';
 import './Dashboard.css';
 
 const courses = [
@@ -77,7 +79,7 @@ function InstructorDashboard() {
     { id: 1, title: 'Welcome to the new learning term!', time: 'Posted Oct 10', audience: 'All learners' },
     { id: 2, title: 'Remember to submit your weekly reflection.', time: 'Posted Oct 8', audience: 'Digital Skills learners' },
   ]);
-  const user = JSON.parse(localStorage.getItem('user_data') || '{}');
+  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user_data') || '{}'));
   const firstName = user.name?.trim().split(/\s+/)[0] || 'Instructor';
   const currentDate = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
   const pendingCount = submissions.filter((submission) => submission.status === 'Needs review').length;
@@ -150,6 +152,7 @@ function InstructorDashboard() {
           <Icon name="logout" size={18} /><span>Sign out</span>
         </button>
       </aside>
+      <FloatingChatBot courseCount={courses.length} />
 
       <main className="instructor-main">
         <header className="instructor-topbar">
@@ -169,10 +172,14 @@ function InstructorDashboard() {
                 </div>
               )}
             </div>
-            <div className="instructor-profile">
-              <span className="instructor-profile-avatar">{firstName.slice(0, 1).toUpperCase()}</span>
-              <span className="instructor-profile-copy"><strong>{user.name || 'Instructor'}</strong><small>Instructor</small></span>
-            </div>
+            <ProfileEditor
+              avatarClassName="instructor-profile-avatar"
+              className="instructor-profile"
+              copyClassName="instructor-profile-copy"
+              onUpdated={setUser}
+              roleLabel="Instructor"
+              user={user}
+            />
           </div>
         </header>
 
