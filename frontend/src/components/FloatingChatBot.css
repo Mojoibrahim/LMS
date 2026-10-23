@@ -2,7 +2,7 @@
   position: fixed;
   z-index: 20;
   bottom: 72px;
-  left: 16px;
+  right: 16px;
   color: #202943;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -43,7 +43,7 @@
 .floating-assistant-panel {
   position: absolute;
   bottom: 56px;
-  left: 0;
+  right: 0;
   display: flex;
   width: min(340px, calc(100vw - 32px));
   max-height: min(480px, calc(100dvh - 100px));
@@ -206,12 +206,10 @@
   .floating-assistant {
     right: 14px;
     bottom: 76px;
-    left: auto;
   }
 
   .floating-assistant-panel {
     right: 0;
-    left: auto;
     width: min(340px, calc(100vw - 28px));
     max-height: calc(100dvh - 104px);
   }

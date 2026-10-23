@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import axios from 'axios';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Area,
@@ -12,6 +13,8 @@ import {
 import FloatingChatBot from '../../components/FloatingChatBot';
 import ProfileEditor from '../../components/ProfileEditor';
 import './Dashboard.css';
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 const enrollmentData = {
   '7 days': [
@@ -52,6 +55,24 @@ const activities = [
   { initials: 'AW', name: 'Alice Wambui', action: 'submitted an assessment in', target: 'Communication Skills', time: '1 hr ago', color: 'green' },
 ];
 
+const initialUsers = [
+  { name: 'Joyce Muthoni', email: 'joyce.muthoni@example.com', role: 'Student', status: 'Active' },
+  { name: 'David Otieno', email: 'david.otieno@example.com', role: 'Teacher', status: 'Active' },
+  { name: 'Faith Njeri', email: 'faith.njeri@example.com', role: 'Student', status: 'Inactive' },
+];
+
+const initialFees = [
+  { name: 'Joyce Muthoni', className: 'Grade 8 East', status: 'Paid' },
+  { name: 'Faith Njeri', className: 'Grade 7 North', status: 'Partial' },
+  { name: 'Daniel Omondi', className: 'Grade 9 West', status: 'Pending' },
+];
+
+const initialApprovals = [
+  { title: 'Grade 8 Mathematics blueprint', standard: 'CBC · Junior School', status: 'Awaiting review' },
+  { title: 'Science lesson template: Energy', standard: 'CBC · Grade 7', status: 'Awaiting review' },
+  { title: 'Digital literacy assessment', standard: 'National curriculum alignment', status: 'Awaiting review' },
+];
+
 const navItems = [
   { label: 'Overview', icon: 'grid', target: 'dashboard' },
   { label: 'Courses', icon: 'book', target: 'courses' },
@@ -59,6 +80,53 @@ const navItems = [
   { label: 'Payments', icon: 'wallet', target: 'revenue' },
   { label: 'Reports', icon: 'chart', target: 'enrollment' },
 ];
+
+function downloadCsv(filename, rows) {
+  const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function parseCsvLine(line) {
+  return line.match(/("(?:[^"]|"")*"|[^,]*)(,|$)/g)
+    ?.map((cell) => cell.replace(/,$/, '').replace(/^"|"$/g, '').replaceAll('""', '"')) || [];
+}
+
+function getDirectoryLabel(value) {
+  if (Array.isArray(value)) {
+    const labels = value.map(getDirectoryLabel).filter((label) => label !== 'Not recorded');
+    return labels.length ? labels.join(', ') : 'Not recorded';
+  }
+  if (value && typeof value === 'object') {
+    return getDirectoryLabel(value.name ?? value.title ?? value.label ?? value.courseName);
+  }
+  return typeof value === 'string' || typeof value === 'number'
+    ? String(value).trim() || 'Not recorded'
+    : 'Not recorded';
+}
+
+function getStudentCourse(student) {
+  return getDirectoryLabel(student.enrolledCourses ?? student.courseNames ?? student.courses ?? student.courseName ?? student.course);
+}
+
+function getStudentClass(student) {
+  return getDirectoryLabel(student.className ?? student.class ?? student.gradeName ?? student.grade);
+}
+
+function getEnrollmentYear(student) {
+  const enrollmentDate = student.enrollmentDate ?? student.enrolledAt ?? student.createdAt;
+  if (!enrollmentDate) return '';
+  const date = new Date(enrollmentDate);
+  return Number.isNaN(date.getTime()) ? '' : String(date.getFullYear());
+}
+
+function compareDirectoryNames(left, right) {
+  return getDirectoryLabel(left).localeCompare(getDirectoryLabel(right), undefined, { sensitivity: 'base', numeric: true });
+}
 
 function Icon({ name, size = 20 }) {
   const paths = {
@@ -91,14 +159,128 @@ function AdminDashboard() {
   const [range, setRange] = useState('30 days');
   const [courseSearch, setCourseSearch] = useState('');
   const [activeNav, setActiveNav] = useState('Overview');
+  const [activeSection, setActiveSection] = useState('overview');
   const [showNotifications, setShowNotifications] = useState(false);
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user_data') || '{}'));
+  const [managedUsers, setManagedUsers] = useState(initialUsers);
+  const [directoryUsers, setDirectoryUsers] = useState([]);
+  const [directoryLoading, setDirectoryLoading] = useState(true);
+  const [directoryError, setDirectoryError] = useState('');
+  const [studentSort, setStudentSort] = useState('name');
+  const [importMessage, setImportMessage] = useState('');
+  const [fees, setFees] = useState(initialFees);
+  const [approvals, setApprovals] = useState(initialApprovals);
+  const [announcement, setAnnouncement] = useState('');
+  const [announcementChannel, setAnnouncementChannel] = useState('Email');
+  const [announcementAudience, setAnnouncementAudience] = useState('Parents');
+  const [broadcastMessage, setBroadcastMessage] = useState('');
   const firstName = user.name?.trim().split(/\s+/)[0] || 'Admin';
   const filteredCourses = useMemo(
     () => courses.filter((course) => `${course.name} ${course.category} ${course.instructor}`.toLowerCase().includes(courseSearch.toLowerCase())),
     [courseSearch],
   );
+  const students = useMemo(() => {
+    const records = directoryUsers.filter((record) => record.role?.toLowerCase() === 'student');
+    return records.sort((left, right) => {
+      if (studentSort === 'year') {
+        const leftYear = getEnrollmentYear(left);
+        const rightYear = getEnrollmentYear(right);
+        if (!leftYear && rightYear) return 1;
+        if (leftYear && !rightYear) return -1;
+        return rightYear.localeCompare(leftYear) || compareDirectoryNames(left.name, right.name);
+      }
+      const getSortValue = {
+        name: (record) => record.name,
+        course: getStudentCourse,
+        class: getStudentClass,
+      }[studentSort];
+      return compareDirectoryNames(getSortValue(left), getSortValue(right))
+        || compareDirectoryNames(left.name, right.name);
+    });
+  }, [directoryUsers, studentSort]);
+  const instructors = useMemo(
+    () => directoryUsers.filter((record) => record.role?.toLowerCase() === 'instructor')
+      .sort((left, right) => compareDirectoryNames(left.name, right.name)),
+    [directoryUsers],
+  );
+  useEffect(() => {
+    const controller = new AbortController();
+    axios.get(`${BACKEND_URL}/api/auth/admin/users`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('jwt_token')}` },
+      signal: controller.signal,
+    })
+      .then(({ data }) => {
+        if (!Array.isArray(data)) throw new Error('The user directory response was not a list.');
+        setDirectoryUsers(data);
+        setDirectoryError('');
+      })
+      .catch((error) => {
+        if (!axios.isCancel(error)) {
+          setDirectoryError(error.response?.data?.message || error.message || 'Could not load registered users.');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDirectoryLoading(false);
+      });
+
+    return () => controller.abort();
+  }, []);
   const currentDate = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
+  const sectionTitles = {
+    overview: 'Overview',
+    courses: 'Courses',
+    people: 'People',
+    instructors: 'Instructors',
+    assessments: 'Assessments',
+    payments: 'Payments',
+    reports: 'Reports',
+    'user-management': 'User & roles',
+    'fee-access': 'Fee access',
+    curriculum: 'CBC approvals',
+    'audit-reports': 'Audit trails',
+    communications: 'Communications',
+  };
+  const sectionByTarget = {
+    dashboard: 'overview',
+    courses: 'courses',
+    learners: 'people',
+    revenue: 'payments',
+    enrollment: 'reports',
+    instructors: 'instructors',
+    assessments: 'assessments',
+    'user-management': 'user-management',
+    'fee-access': 'fee-access',
+    curriculum: 'curriculum',
+    'audit-reports': 'audit-reports',
+    communications: 'communications',
+  };
+  const activeNavBySection = {
+    overview: 'Overview',
+    courses: 'Courses',
+    people: 'People',
+    instructors: 'People',
+    assessments: 'Courses',
+    payments: 'Payments',
+    reports: 'Reports',
+    'user-management': 'People',
+    'fee-access': 'Payments',
+    curriculum: 'Courses',
+    'audit-reports': 'Reports',
+    communications: 'Overview',
+  };
+  const visibleWhen = (...sections) => sections.includes(activeSection) ? undefined : { display: 'none' };
+
+  const handleSectionNavigation = (event) => {
+    const link = event.target.closest('a[href^="#"]');
+    const target = link?.getAttribute('href')?.slice(1);
+    const section = sectionByTarget[target];
+    if (!section) return;
+
+    event.preventDefault();
+    setActiveSection(section);
+    setActiveNav(activeNavBySection[section]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('jwt_token');
@@ -112,17 +294,97 @@ function AdminDashboard() {
       ['Course', 'Category', 'Instructor', 'Learners', 'Completion rate', 'Status'],
       ...courses.map((course) => [course.name, course.category, course.instructor, course.learners, `${course.completion}%`, course.status]),
     ];
-    const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'tusome-tec-course-report.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv('tusome-tec-course-report.csv', rows);
+  };
+
+  const exportUsers = () => {
+    downloadCsv('tusome-tec-users.csv', [
+      ['Name', 'Email', 'Role', 'Status'],
+      ...managedUsers.map(({ name, email, role, status }) => [name, email, role, status]),
+    ]);
+  };
+
+  const importUsers = async (event) => {
+    const [file] = event.target.files || [];
+    if (!file) return;
+
+    try {
+      const lines = (await file.text()).replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+      const headers = parseCsvLine(lines.shift() || '').map((header) => header.trim().toLowerCase());
+      const nameIndex = headers.indexOf('name');
+      const emailIndex = headers.indexOf('email');
+      const roleIndex = headers.indexOf('role');
+      if (nameIndex < 0 || emailIndex < 0 || roleIndex < 0) {
+        setImportMessage('CSV must include Name, Email, and Role columns.');
+        return;
+      }
+
+      const importedUsers = lines.map(parseCsvLine).map((columns) => ({
+        name: columns[nameIndex]?.trim(),
+        email: columns[emailIndex]?.trim(),
+        role: columns[roleIndex]?.trim(),
+        status: columns[headers.indexOf('status')]?.trim() || 'Active',
+      })).filter((record) => record.name && record.email && record.role);
+      if (!importedUsers.length) {
+        setImportMessage('No valid user rows found. Check the selected CSV and try again.');
+        return;
+      }
+
+      setManagedUsers((currentUsers) => [...currentUsers, ...importedUsers]);
+      setImportMessage(`${importedUsers.length} user${importedUsers.length === 1 ? '' : 's'} imported.`);
+    } catch (error) {
+      setImportMessage(`Could not read this CSV: ${error.message}`);
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const exportAuditReport = () => {
+    downloadCsv('tusome-tec-oversight-report.csv', [
+      ['Report', 'Measure', 'Value'],
+      ['Attendance', 'Learner attendance', '92%'],
+      ['Teacher activity', 'Active this week', '38 of 42'],
+      ['Completion', 'Course completion rate', '78.4%'],
+      ['Security audit', 'Recent sign-in alerts', '2 reviewed'],
+      ...fees.map((record) => ['Fee and access', `${record.name} · ${record.className}`, `${record.status} · ${record.status === 'Paid' ? 'Access allowed' : 'Access restricted'}`]),
+    ]);
+  };
+
+  const prepareBroadcast = (event) => {
+    event.preventDefault();
+    if (!announcement.trim()) {
+      setBroadcastMessage('Enter a message before preparing the broadcast.');
+      return;
+    }
+    setBroadcastMessage(`${announcementChannel} notice for ${announcementAudience.toLowerCase()} is ready. Connect a delivery provider to send it.`);
+  };
+
+  const toggleUserStatus = (index) => {
+    setManagedUsers((currentUsers) => currentUsers.map((record, userIndex) => (
+      userIndex === index ? { ...record, status: record.status === 'Active' ? 'Inactive' : 'Active' } : record
+    )));
+  };
+
+  const updateUserRole = (index, role) => {
+    setManagedUsers((currentUsers) => currentUsers.map((record, userIndex) => (
+      userIndex === index ? { ...record, role } : record
+    )));
+  };
+
+  const updateFeeStatus = (index, status) => {
+    setFees((currentFees) => currentFees.map((record, feeIndex) => (
+      feeIndex === index ? { ...record, status } : record
+    )));
+  };
+
+  const updateApprovalStatus = (index, status) => {
+    setApprovals((currentApprovals) => currentApprovals.map((record, approvalIndex) => (
+      approvalIndex === index ? { ...record, status } : record
+    )));
   };
 
   return (
-    <div className="admin-dashboard" id="dashboard">
+    <div className="admin-dashboard" id="dashboard" onClick={handleSectionNavigation}>
       <aside className="admin-sidebar">
         <a className="admin-brand" href="#dashboard" onClick={() => setActiveNav('Overview')} aria-label="TusomeTec home">
           <span className="admin-brand-mark">t</span>
@@ -153,11 +415,26 @@ function AdminDashboard() {
 
         <div className="sidebar-divider" />
         <span className="sidebar-section-label">MANAGE</span>
-        <a className="admin-nav-link" href="#instructors" onClick={() => setActiveNav('People')}>
+        <a className={`admin-nav-link${activeSection === 'instructors' ? ' is-active' : ''}`} href="#instructors" onClick={() => setActiveNav('People')}>
           <Icon name="users" size={19} /><span>Instructors</span><span className="nav-pending">3</span>
         </a>
-        <a className="admin-nav-link" href="#assessments" onClick={() => setActiveNav('Courses')}>
+        <a className={`admin-nav-link${activeSection === 'assessments' ? ' is-active' : ''}`} href="#assessments" onClick={() => setActiveNav('Courses')}>
           <Icon name="check" size={19} /><span>Assessments</span>
+        </a>
+        <a className={`admin-nav-link${activeSection === 'user-management' ? ' is-active' : ''}`} href="#user-management" onClick={() => setActiveNav('People')}>
+          <Icon name="users" size={19} /><span>User &amp; roles</span>
+        </a>
+        <a className={`admin-nav-link${activeSection === 'fee-access' ? ' is-active' : ''}`} href="#fee-access" onClick={() => setActiveNav('Payments')}>
+          <Icon name="wallet" size={19} /><span>Fee access</span>
+        </a>
+        <a className={`admin-nav-link${activeSection === 'curriculum' ? ' is-active' : ''}`} href="#curriculum" onClick={() => setActiveNav('Courses')}>
+          <Icon name="book" size={19} /><span>CBC approvals</span>
+        </a>
+        <a className={`admin-nav-link${activeSection === 'audit-reports' ? ' is-active' : ''}`} href="#audit-reports" onClick={() => setActiveNav('Reports')}>
+          <Icon name="chart" size={19} /><span>Audit trails</span>
+        </a>
+        <a className={`admin-nav-link${activeSection === 'communications' ? ' is-active' : ''}`} href="#communications" onClick={() => setActiveNav('Overview')}>
+          <Icon name="bell" size={19} /><span>Communications</span>
         </a>
 
         <div className="sidebar-help">
@@ -178,7 +455,7 @@ function AdminDashboard() {
           <div className="mobile-brand">
             <span className="admin-brand-mark">t</span><strong>Tusome<span className="brand-highlight">Tec</span></strong>
           </div>
-          <div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>Overview</strong></div>
+          <div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>{sectionTitles[activeSection]}</strong></div>
           <div className="topbar-actions">
             <span className="topbar-date">{currentDate}</span>
             <div className="notification-wrap">
@@ -205,39 +482,39 @@ function AdminDashboard() {
         </header>
 
         <div className="admin-content">
-          <section className="welcome-row">
+          <section className="welcome-row" style={visibleWhen('overview')}>
             <div>
               <p className="welcome-kicker">ADMIN OVERVIEW</p>
               <h1>Good morning, {firstName} <span className="wave">✦</span></h1>
-              <p className="welcome-description">Here’s what’s happening across your learning workspace.</p>
+              <p className="welcome-description">Institution snapshot. Live counts require a connected institutional data service.</p>
             </div>
             <button className="export-button" type="button" onClick={exportReport}><Icon name="download" size={17} /> Export report</button>
           </section>
 
-          <section className="stats-grid" aria-label="Learning platform overview">
-            <article className="stat-card" id="learners">
-              <div className="stat-card-top"><span className="stat-icon stat-icon-purple"><Icon name="users" size={19} /></span><span className="stat-trend"><Icon name="arrowUp" size={13} /> 12.8%</span></div>
-              <p className="stat-label">Total learners</p><strong className="stat-value">2,846</strong><p className="stat-footnote">vs. last month</p>
+          <section className="stats-grid" aria-label="Institution overview" style={visibleWhen('overview')}>
+            <article className="stat-card">
+              <div className="stat-card-top"><span className="stat-icon stat-icon-purple"><Icon name="users" size={19} /></span><span className="stat-trend">Institution</span></div>
+              <p className="stat-label">Active students</p><strong className="stat-value">2,846</strong><p className="stat-footnote">Current student accounts</p>
               <div className="stat-sparkline purple-spark"><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
             </article>
             <article className="stat-card">
-              <div className="stat-card-top"><span className="stat-icon stat-icon-blue"><Icon name="book" size={19} /></span><span className="stat-trend"><Icon name="arrowUp" size={13} /> 8.2%</span></div>
-              <p className="stat-label">Active courses</p><strong className="stat-value">24</strong><p className="stat-footnote">3 drafts in progress</p>
+              <div className="stat-card-top"><span className="stat-icon stat-icon-blue"><Icon name="users" size={19} /></span><span className="stat-trend">Institution</span></div>
+              <p className="stat-label">Teachers</p><strong className="stat-value">42</strong><p className="stat-footnote">38 active this week</p>
               <div className="stat-sparkline blue-spark"><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
             </article>
             <article className="stat-card" id="revenue">
-              <div className="stat-card-top"><span className="stat-icon stat-icon-green"><Icon name="wallet" size={19} /></span><span className="stat-trend"><Icon name="arrowUp" size={13} /> 6.4%</span></div>
-              <p className="stat-label">Revenue this month</p><strong className="stat-value">KES 486,200</strong><p className="stat-footnote">vs. last month</p>
+              <div className="stat-card-top"><span className="stat-icon stat-icon-green"><Icon name="book" size={19} /></span><span className="stat-trend">Institution</span></div>
+              <p className="stat-label">Active classes</p><strong className="stat-value">86</strong><p className="stat-footnote">Across all grade levels</p>
               <div className="stat-sparkline green-spark"><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
             </article>
             <article className="stat-card">
-              <div className="stat-card-top"><span className="stat-icon stat-icon-orange"><Icon name="chart" size={19} /></span><span className="stat-trend"><Icon name="arrowUp" size={13} /> 3.1%</span></div>
-              <p className="stat-label">Completion rate</p><strong className="stat-value">78.4%</strong><p className="stat-footnote">across all courses</p>
+              <div className="stat-card-top"><span className="stat-icon stat-icon-orange"><Icon name="chart" size={19} /></span><span className="stat-trend">System health</span></div>
+              <p className="stat-label">Storage used</p><strong className="stat-value">68%</strong><p className="stat-footnote">Platform operational · 340 GB / 500 GB</p>
               <div className="stat-sparkline orange-spark"><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
             </article>
           </section>
 
-          <section className="analytics-grid">
+          <section className="analytics-grid" style={{ ...visibleWhen('overview', 'reports'), gridTemplateColumns: activeSection === 'reports' ? 'minmax(0, 1fr)' : undefined }}>
             <article className="panel enrollment-panel" id="enrollment">
               <div className="panel-heading">
                 <div><h2>Enrollment overview</h2><p>Track learner sign-ups over time</p></div>
@@ -262,8 +539,8 @@ function AdminDashboard() {
               <div className="chart-legend"><span className="legend-dot" /> New enrollments <span className="chart-caption">Updated just now</span></div>
             </article>
 
-            <article className="panel activity-panel">
-              <div className="panel-heading"><div><h2>Recent activity</h2><p>Latest updates from your learners</p></div><button className="text-link" type="button" onClick={() => { setActiveNav('People'); document.getElementById('learners')?.scrollIntoView({ behavior: 'smooth' }); }}>View all <Icon name="chevron" size={14} /></button></div>
+            <article className="panel activity-panel" style={visibleWhen('overview')}>
+              <div className="panel-heading"><div><h2>Recent activity</h2><p>Latest updates from your learners</p></div><button className="text-link" type="button" onClick={() => { setActiveNav('People'); setActiveSection('people'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>View all <Icon name="chevron" size={14} /></button></div>
               <div className="activity-list">
                 {activities.map((activity) => (
                   <div className="activity-item" key={activity.name}>
@@ -276,8 +553,8 @@ function AdminDashboard() {
             </article>
           </section>
 
-          <section className="lower-grid">
-            <article className="panel courses-panel" id="courses">
+          <section className="lower-grid" style={{ ...visibleWhen('overview', 'courses', 'instructors', 'assessments'), gridTemplateColumns: activeSection === 'overview' ? undefined : 'minmax(0, 1fr)' }}>
+            <article className="panel courses-panel" id="courses" style={visibleWhen('overview', 'courses')}>
               <div className="panel-heading courses-heading">
                 <div><h2>Course performance</h2><p>Review engagement and learner progress</p></div>
                 <div className="course-tools">
@@ -304,7 +581,7 @@ function AdminDashboard() {
               </div>
             </article>
 
-            <article className="panel attention-panel" id="instructors">
+            <article className="panel attention-panel" style={visibleWhen('overview', 'instructors', 'assessments')}>
               <div className="panel-heading"><div><h2>Needs your attention</h2><p>A few things to keep moving</p></div><span className="attention-count">3</span></div>
               <a className="attention-item" href="mailto:support@tusometec.com?subject=Instructor%20review">
                 <span className="attention-icon attention-purple"><Icon name="users" size={17} /></span><span className="attention-copy"><strong>Instructor approvals</strong><small>3 profiles awaiting review</small></span><Icon name="chevron" size={15} />
@@ -313,6 +590,158 @@ function AdminDashboard() {
                 <span className="attention-icon attention-amber"><Icon name="book" size={17} /></span><span className="attention-copy"><strong>Course review</strong><small>1 course needs your approval</small></span><Icon name="chevron" size={15} />
               </a>
               <div className="platform-health"><span className="health-check"><Icon name="check" size={14} /></span><span><strong>All systems operational</strong><small>Platform status · Updated 2 min ago</small></span></div>
+            </article>
+          </section>
+
+          <section className="admin-tools-grid" aria-label="Institution management tools" style={{ ...visibleWhen('overview', 'people', 'instructors', 'payments', 'curriculum', 'reports', 'communications', 'user-management', 'fee-access', 'audit-reports'), gridTemplateColumns: activeSection === 'overview' ? undefined : 'minmax(0, 1fr)' }}>
+            <article className="panel management-panel directory-panel" id="learners" style={visibleWhen('overview', 'people')}>
+              <div className="panel-heading management-heading">
+                <div><h2>Registered students</h2><p>{students.length} student{students.length === 1 ? '' : 's'} in the directory</p></div>
+                <label className="directory-sort-label" htmlFor="student-sort">Sort by
+                  <select id="student-sort" className="directory-sort" value={studentSort} onChange={(event) => setStudentSort(event.target.value)}>
+                    <option value="name">Name</option>
+                    <option value="course">Course</option>
+                    <option value="class">Class</option>
+                    <option value="year">Enrollment year</option>
+                  </select>
+                </label>
+              </div>
+              {directoryError && <p className="form-feedback directory-error" role="alert">{directoryError}</p>}
+              <div className="directory-table-wrap">
+                <table className="management-table directory-table">
+                  <thead><tr><th>STUDENT</th><th>COURSE(S)</th><th>CLASS</th><th>YEAR ENROLLED</th></tr></thead>
+                  <tbody>
+                    {directoryLoading && <tr><td className="directory-message" colSpan="4">Loading registered students…</td></tr>}
+                    {!directoryLoading && !directoryError && students.map((student) => (
+                      <tr key={student._id || student.id || student.email}>
+                        <td><strong>{student.name || 'Name not provided'}</strong><small>{student.email}</small></td>
+                        <td>{getStudentCourse(student)}</td>
+                        <td>{getStudentClass(student)}</td>
+                        <td>{getEnrollmentYear(student) || 'Not recorded'}</td>
+                      </tr>
+                    ))}
+                    {!directoryLoading && !directoryError && students.length === 0 && <tr><td className="directory-message" colSpan="4">No registered students found.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+
+            <article className="panel management-panel directory-panel" id="instructors" style={visibleWhen('overview', 'instructors')}>
+              <div className="panel-heading management-heading">
+                <div><h2>Instructors</h2><p>{instructors.length} instructor{instructors.length === 1 ? '' : 's'} in the directory</p></div>
+              </div>
+              {directoryError && <p className="form-feedback directory-error" role="alert">{directoryError}</p>}
+              <div className="directory-table-wrap">
+                <table className="management-table directory-table">
+                  <thead><tr><th>INSTRUCTOR</th><th>DEPARTMENT</th><th>DATE REGISTERED</th></tr></thead>
+                  <tbody>
+                    {directoryLoading && <tr><td className="directory-message" colSpan="3">Loading instructors…</td></tr>}
+                    {!directoryLoading && !directoryError && instructors.map((instructor) => (
+                      <tr key={instructor._id || instructor.id || instructor.email}>
+                        <td><strong>{instructor.name || 'Name not provided'}</strong><small>{instructor.email}</small></td>
+                        <td>{instructor.department || 'Not assigned'}</td>
+                        <td>{getEnrollmentYear(instructor) || 'Not recorded'}</td>
+                      </tr>
+                    ))}
+                    {!directoryLoading && !directoryError && instructors.length === 0 && <tr><td className="directory-message" colSpan="3">No registered instructors found.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+
+            <article className="panel management-panel" id="user-management" style={visibleWhen('overview', 'people', 'user-management')}>
+              <div className="panel-heading management-heading">
+                <div><h2>User &amp; role management</h2><p>Import, export, and manage account access</p></div>
+                <button className="export-button compact-button" type="button" onClick={exportUsers}>Export users</button>
+              </div>
+              <label className="import-control">
+                <span>Import users from CSV (Excel-compatible)</span>
+                <input type="file" accept=".csv,text/csv" onChange={importUsers} />
+              </label>
+              {importMessage && <p className="form-feedback" role="status">{importMessage}</p>}
+              <div className="management-table-wrap">
+                <table className="management-table">
+                  <thead><tr><th>USER</th><th>ROLE</th><th>ACCOUNT</th></tr></thead>
+                  <tbody>
+                    {managedUsers.map((record, index) => (
+                      <tr key={`${record.email}-${index}`}>
+                        <td><strong>{record.name}</strong><small>{record.email}</small></td>
+                        <td><select aria-label={`Role for ${record.name}`} value={record.role} onChange={(event) => updateUserRole(index, event.target.value)}><option>Student</option><option>Teacher</option><option>Administrator</option></select></td>
+                        <td><button className={`account-toggle${record.status === 'Active' ? ' is-enabled' : ''}`} type="button" onClick={() => toggleUserStatus(index)}>{record.status}</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+
+            <article className="panel fee-panel" id="fee-access" style={visibleWhen('overview', 'payments', 'fee-access')}>
+              <div className="panel-heading management-heading">
+                <div><h2>Fee status &amp; access</h2><p>Clearance linked to exam and course access</p></div>
+              </div>
+              <div className="fee-list">
+                {fees.map((record, index) => (
+                  <div className="fee-row" key={record.name}>
+                    <span className="fee-person"><strong>{record.name}</strong><small>{record.className}</small></span>
+                    <select aria-label={`Fee status for ${record.name}`} value={record.status} onChange={(event) => updateFeeStatus(index, event.target.value)}>
+                      <option>Paid</option><option>Partial</option><option>Pending</option>
+                    </select>
+                    <span className={`access-state${record.status === 'Paid' ? ' access-allowed' : ' access-restricted'}`}>{record.status === 'Paid' ? 'Access allowed' : 'Restricted'}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="policy-note">Partial and pending accounts are flagged for restricted access. Changes here are a dashboard record only.</p>
+            </article>
+
+            <article className="panel curriculum-panel" id="curriculum" style={visibleWhen('overview', 'curriculum')}>
+              <div className="panel-heading management-heading">
+                <div><h2>Curriculum &amp; CBC alignment</h2><p>Review blueprints, lesson templates, and standards alignment</p></div>
+              </div>
+              <div className="approval-list">
+                {approvals.map((approval, index) => (
+                  <div className="approval-row" key={approval.title}>
+                    <span className="approval-copy"><strong>{approval.title}</strong><small>{approval.standard}</small></span>
+                    {approval.status === 'Awaiting review' ? (
+                      <span className="approval-actions">
+                        <button type="button" onClick={() => updateApprovalStatus(index, 'Approved')}>Approve</button>
+                        <button type="button" onClick={() => updateApprovalStatus(index, 'Changes requested')}>Request changes</button>
+                      </span>
+                    ) : <span className={`approval-status${approval.status === 'Approved' ? ' is-approved' : ''}`}>{approval.status}</span>}
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel reports-panel" id="audit-reports" style={visibleWhen('overview', 'reports', 'audit-reports')}>
+              <div className="panel-heading management-heading">
+                <div><h2>Reports &amp; audit trails</h2><p>Institution analytics and security review</p></div>
+                <span className="report-actions">
+                  <button className="export-button compact-button" type="button" onClick={exportAuditReport}>Export CSV</button>
+                  <button className="export-button compact-button print-report-button" type="button" onClick={() => window.print()}>Print / PDF</button>
+                </span>
+              </div>
+              <div className="report-metrics">
+                <div><span>Student attendance</span><strong>92%</strong></div>
+                <div><span>Teacher activity</span><strong>38 / 42 active</strong></div>
+                <div><span>Course completion</span><strong>78.4%</strong></div>
+                <div><span>Security log</span><strong>2 alerts reviewed</strong></div>
+              </div>
+              <p className="policy-note">Report exports are CSV files that open in spreadsheet tools.</p>
+            </article>
+
+            <article className="panel communication-panel" id="communications" style={visibleWhen('overview', 'communications')}>
+              <div className="panel-heading management-heading">
+                <div><h2>Communication hub</h2><p>Prepare notices for parents, students, or staff</p></div>
+              </div>
+              <form className="broadcast-form" onSubmit={prepareBroadcast}>
+                <div className="broadcast-options">
+                  <label>Channel<select value={announcementChannel} onChange={(event) => setAnnouncementChannel(event.target.value)}><option>Email</option><option>SMS</option></select></label>
+                  <label>Audience<select value={announcementAudience} onChange={(event) => setAnnouncementAudience(event.target.value)}><option>Parents</option><option>Students</option><option>Staff</option></select></label>
+                </div>
+                <label className="broadcast-message-label">Announcement<textarea rows="3" value={announcement} onChange={(event) => setAnnouncement(event.target.value)} placeholder="Write an urgent notice or update..." /></label>
+                <button className="broadcast-button" type="submit">Prepare broadcast</button>
+                {broadcastMessage && <p className="form-feedback" role="status">{broadcastMessage}</p>}
+              </form>
             </article>
           </section>
           <footer className="admin-footer">© {new Date().getFullYear()} TusomeTec Academy <span>Learning that moves you forward.</span></footer>

@@ -52,6 +52,17 @@ const staffSchema = new mongoose.Schema({
         },
         default: 'student'
     },
+    enrolledCourses: {
+        type: [String],
+        default: []
+    },
+    className: {
+        type: String,
+        trim: true
+    },
+    enrollmentDate: {
+        type: Date
+    },
     checkedIn: {
         type: Boolean,
         default: false

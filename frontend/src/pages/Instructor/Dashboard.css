@@ -757,6 +757,54 @@ a.instructor-stat-trend:hover {
   font-size: 8px;
 }
 
+.instructor-resource-access {
+  margin-top: 11px;
+  padding-top: 9px;
+  border-top: 1px solid #f0f1f5;
+}
+
+.instructor-resource-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: #59647b;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.instructor-resource-heading small {
+  color: #a0a6b4;
+  font-size: 8px;
+  font-weight: 450;
+}
+
+.instructor-resource-links {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.instructor-resource-link {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 6px 7px;
+  border: 1px solid #eceef4;
+  border-radius: 7px;
+  color: #626d82;
+  background: #fafbfc;
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.instructor-resource-link small {
+  color: #a0a6b4;
+  font-size: 7px;
+  font-weight: 450;
+}
+
 .instructor-course-action {
   position: absolute;
   top: 14px;
@@ -1699,6 +1747,21 @@ a.instructor-stat-trend:hover {
 
   .instructor-course-meta {
     gap: 8px;
+  }
+
+  .instructor-resource-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .instructor-resource-links {
+    gap: 4px;
+  }
+
+  .instructor-resource-link {
+    padding: 6px 5px;
+    font-size: 7px;
   }
 
   .instructor-course-action {
